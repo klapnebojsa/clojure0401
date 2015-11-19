@@ -81,7 +81,7 @@ d1
 
 (defn call-service     ;funkcija koja koja uzima drugu funkciju kao callback-fn
   [arg1 arg2 callback-fn]
-  (println arg1 arg2 callback-fn)
+  ;(println arg1 arg2 callback-fn)
   ; ...perform service call, eventually invoking callback-fn with results...
   (future (callback-fn (+ arg1 arg2) (- arg1 arg2))))
 ;(call-service 42 5 +)
@@ -99,6 +99,44 @@ d1
 
 ((sync-fn call-service) 8 7)  ;poziva sync-fn gde je async-fn=call-service i args=8 7 u okviru fn funkcije
 ;(15 1)               -resenje prvo je zbir unetih brojeva (15), drugo je razlika unetih brojeva (1)
+
+(defn phone-numbers
+  [string]
+  (re-seq #"(\d{3})[\.-]?(\d{3})[\.-]?(\d{4})" string))
+(phone-numbers " Sunil: 617.555.2937, Betty: 508.555.2218")
+;(["617.555.2937" "617" "555" "2937"] ["508.555.2218" "508" "555" "2218"])
+
+(def files (repeat 100
+                   (apply str 
+                          (concat (repeat 1000000 \space)
+                                  "Sunil: 617.555.2937, Betty: 508.555.2218"))))
+;(time (dorun (map phone-numbers files))) ;dorun se koristi zato sto ne zelimo da stampamo sve rezultate u REPL
+;"Elapsed time: 1596.122235 msecs"
+;(time (dorun (pmap phone-numbers files)))
+;"Elapsed time: 385.455303 msecs"
+
+(def files1 (repeat 100000 
+                    (apply str 
+                           (concat (repeat 1000 \space)
+                                   "Sunil: 617.555.2937, Betty: 508.555.2218"))))
+;(time (dorun (map phone-numbers files1)))
+;"Elapsed time: 1768.136658 msecs"
+;(time (dorun (pmap phone-numbers files1)))
+;"Elapsed time: 471.532979 msecs"
+
+(def sarah {:name "Sarah" :age 25 :wears-glasses? false})
+
+@(atom 12)
+;= 12
+@(agent {:c 42})
+;= {:c 42}
+(map deref [(agent {:c 42}) (atom 12) (ref "http://clojure.org") (var +)])
+;({:c 42} 12 "http://clojure.org" #<core$_PLUS_ clojure.core$_PLUS_@14a5296f>)
+
+
+
+
+
 
 
 
