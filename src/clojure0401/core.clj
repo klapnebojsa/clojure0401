@@ -1,4 +1,5 @@
-(ns clojure0401.core)
+(ns clojure0401.core
+  (:use clojure.pprint))
 
 #_(def d (delay (println "Running...")
                 :done!))
@@ -132,6 +133,281 @@ d1
 ;= {:c 42}
 (map deref [(agent {:c 42}) (atom 12) (ref "http://clojure.org") (var +)])
 ;({:c 42} 12 "http://clojure.org" #<core$_PLUS_ clojure.core$_PLUS_@14a5296f>)
+
+(def sarah (atom {:name "Sarah" :age 25 :wears-glasses? false}))
+(swap! sarah update-in [:age] + 3)
+;{:age 28, :wears-glasses? false, :name "Sarah"}
+
+(swap! sarah (comp #(update-in % [:age] inc)
+                   #(assoc % :wears-glasses? true)))
+;{:age 29, :name "Sarah", :wears-glasses? true}
+
+(defmacro futures
+  [n & exprs]
+  (vec (for [_ (range n)
+             expr exprs]
+         `(future ~expr))))
+
+(defmacro wait-futures
+  [& args]
+  `(doseq [f# (futures ~@args)]
+     @f#))
+
+(def xs (atom #{1 2 3}))
+#_(wait-futures 1 (swap! xs (fn [v]
+                               (Thread/sleep 250)
+                               (println "trying 4")
+                               (conj v 4)))
+                 (swap! xs (fn [v]
+                             (Thread/sleep 500)
+                             (println "trying 5")
+                             (conj v 5))))
+#_(trying 4
+trying 5
+trying 5
+nil)
+;@xs
+;#{1 4 3 2 5}
+
+(compare-and-set! xs :wrong "new value")
+;= false
+(compare-and-set! xs @xs "new value")
+;= true
+;@xs
+;"new value"
+
+(def xs (atom #{1 2}))
+;= #'user/xs
+(compare-and-set! xs #{1 2} "new value")
+;= false
+
+(reset! xs :y)
+;:y
+@xs
+;:y
+
+(defn echo-watch
+  [key identity old new]
+  (println key old "=>" new))
+(def sarah (atom {:name "Sarah" :age 25}))
+(add-watch sarah :echo echo-watch)
+;(swap! sarah update-in [:age] inc)
+;:echo {:name Sarah, :age 25} => {:name Sarah, :age 26}
+(add-watch sarah :echo2 echo-watch)
+;(swap! sarah update-in [:age] inc)
+;:echo {:age 25, :name Sarah} => {:age 26, :name Sarah}
+;:echo {:age 26, :name Sarah} => {:age 27, :name Sarah}
+;:echo2 {:age 26, :name Sarah} => {:age 27, :name Sarah}
+;{:age 27, :name "Sarah"}
+
+(remove-watch sarah :echo2)
+;(swap! sarah update-in [:age] inc)
+;:echo {:age 27, :name Sarah} => {:age 28, :name Sarah}
+;{:age 28, :name "Sarah"}
+
+;(reset! sarah @sarah)
+;:echo {:age 28, :name Sarah} => {:age 28, :name Sarah}
+;{:age 28, :name "Sarah"}
+
+(def history (atom ()))
+(defn log->list
+  [dest-atom key source old new]
+  (when (not= old new)
+    (swap! dest-atom conj new)))
+(def sarah (atom {:name "Sarah", :age 25}))
+(add-watch sarah :record (partial log->list history))
+(swap! sarah update-in [:age] inc)
+;{:age 26, :name "Sarah"}
+(swap! sarah update-in [:age] inc)
+;{:age 27, :name "Sarah"}
+(swap! sarah identity)
+;{:age 27, :name "Sarah"}
+(swap! sarah assoc :wears-glasses? true)
+;{:age 27, :name "Sarah", :wears-glasses? true}
+(swap! sarah update-in [:age] inc)
+;{:age 28, :name "Sarah", :wears-glasses? true}
+;(pprint @history)
+#_({:age 28, :name "Sarah", :wears-glasses? true}
+ {:age 27, :name "Sarah", :wears-glasses? true}
+ {:age 27, :name "Sarah"}
+ {:age 26, :name "Sarah"})
+
+(def n (atom 1 :validator pos?))
+(swap! n + 500)
+;501
+;(swap! n - 1000)
+;CompilerException java.lang.IllegalStateException: Invalid reference state, compiling:(clojure0401\core.clj:234:16)
+
+(set-validator! sarah #(or (:age %)
+                           (throw (IllegalStateException. "People must have `:age`s!"))))
+;(swap! sarah dissoc :age)
+;CompilerException java.lang.IllegalStateException: People must have `:age`s!, compiling:(clojure0401\core.clj:240:90)
+
+(defn character
+  [name & {:as opts}]
+  (ref (merge {:name name :items #{} :health 500}
+              opts)))
+(def smaug   (character "Smaug"   :health 500 :strength 400 :items (set (range 50))))
+;smaug
+;#<Ref@5fa9b254: {:strength 400, :name "Smaug", :items #{0 7 20 27 1 24 39 46 4 15 48 21 31 32 40 33 13 22 36 41 43 29 44 6 28 25 34 17 3 12 2 23 47 35 19 11 9 5 14 45 26 16 38 30 10 18 42 37 8 49}, :health 500}>
+(def bilbo   (character "Bilbo"   :health 100 :strength 100))
+(def gandalf (character "Gandalf" :health 75  :mana 750))
+
+(defn loot 
+  [from to]
+  (dosync                    ;startuje transakciju ako vec nije startovana u toj niti
+    (when-let [item (first (:items @from))]   ;ukoliko se ostvari funkcija tj. ako postoji bar jedan items u liku from (od koga), prvi se smesta u promenjivu item i izvrsavaju se sledece dve linije koda
+     ;(println "from to" (:name @from) (:name @to))  ;bez ovoga nece da promeni nit i onda obojica preuzimaju sve items od gubitnika
+      ;alter - sluzi za transakcijsku obradu podataka. ispunjava se samo ako se izvrse sve transakcije. ako ne vrednosti se ne menjaju
+        (alter to update-in [:items] conj item)           ;u promenjivu to se dodaje vrednost oduzeta od promenjive to                                                         ; 
+        (alter from update-in [:items] disj item))))      ;od promejnive to se oduzima item 
+
+(wait-futures 1                               ;wait-futures je ranije definisan MACRO - kada se dodje do makroa videti sa on radi
+              (while (loot smaug bilbo))
+              (while (loot smaug gandalf)))
+
+@smaug
+;{:strength 400, :name "Smaug", :items #{}, :health 500}
+@bilbo
+;{:strength 100, :name Bilbo, :items #{33 13 22 36 41 43 29 44 28 23 35 11 5 45 16 30 18 37 49}, :health 100}>
+@gandalf
+;{:mana 750, :name Gandalf, :items #{0 7 20 27 1 24 39 46 4 15 48 21 31 32 40 6 25 34 17 3 12 2 47 19 9 14 26 38 10 42 8}, :health 75}>
+
+(map (comp count :items deref) [bilbo gandalf])
+;(19 31)
+(filter (:items @bilbo) (:items @gandalf))
+;()
+
+(= (/ (/ 120 3) 4) (/ (/ 120 4) 3))
+(= ((comp #(/ % 3) #(/ % 4)) 120)    ;comp - kompozicija 
+   ((comp #(/ % 4) #(/ % 3)) 120))     ;#(/ % 3) - funkcija koja deli zadati broj sa 3
+                                       ;#(/ % 4) - funkcija koja deli broj (koji je dobijen u prethodnom koraku) sa 4
+                                       ;120 je zadati broj
+(map
+  (comp - (partial + 3) (partial * 5))
+  [1 2 3 4])
+;(-8 -13 -18 -23)
+
+(def x (ref 0))
+#_(time (wait-futures 5
+                        (dotimes [_ 1000]
+                          (dosync (alter x + (apply + (range 1000)))))
+                        (dotimes [_ 1000]
+                          (dosync (alter x - (apply + (range 1000)))))))
+;"Elapsed time: 8390.735556 msecs"
+
+
+#_(time (wait-futures 5
+                      (dotimes [_ 1000]
+                        (dosync (commute x + (apply + (range 1000)))))
+                      (dotimes [_ 1000]
+                        (dosync (commute x - (apply + (range 1000)))))))
+;"Elapsed time: 110.156591 msecs"
+
+;NEISPRAVNO 
+(defn flawed-loot
+  [from to]
+  (dosync
+    (when-let [item (first (:items @from))]
+      (commute to update-in [:items] conj item)
+      (commute from update-in [:items] disj item))))
+
+(def smaug (character "Smaug" :health 500 :strength 400 :items (set (range 50))))
+(def bilbo (character "Bilbo" :health 100 :strength 100))
+(def gandalf (character "Gandalf" :health 75 :mana 750))
+
+(wait-futures 1
+              (while (flawed-loot smaug bilbo))
+              (while (flawed-loot smaug gandalf)))
+
+(map (comp count :items deref) [bilbo gandalf])
+;(18 34)   ;bilbo ima 5 items, gandalf ima 34  - PROBLEM nije zbir 50
+(filter (:items @bilbo) (:items @gandalf))
+;(0 7 20 27 24)   ;ovi items se ponavljaju kod jednog i drugog
+
+(defn fixed-loot
+  [from to]
+  (dosync
+    (when-let [item (first (:items @from))]
+    ;(println "from to" (:name @from) (:name @to))  ;bez ovoga nece da promeni nit i onda obojica preuzimaju sve items od gubitnika
+      (commute to update-in [:items] conj item)
+      (alter from update-in [:items] disj item))))
+
+(def smaug (character "Smaug" :health 500 :strength 400 :items (set (range 50))))
+(def bilbo (character "Bilbo" :health 100 :strength 100))
+(def gandalf (character "Gandalf" :health 75 :mana 750))
+
+(wait-futures 1
+              (while (fixed-loot smaug bilbo))
+              (while (fixed-loot smaug gandalf)))
+
+(map (comp count :items deref) [bilbo gandalf])
+;(20 30)
+(filter (:items @bilbo) (:items @gandalf))
+;()
+
+(defn attack
+  [aggressor target]
+  (dosync
+    (let [damage (* (rand 0.1) (:strength @aggressor))]
+      (commute target update-in [:health] #(max 0 (- % damage))))))
+(defn heal
+  [healer target]
+  (dosync
+    (let [aid (* (rand 0.1) (:mana @healer))]
+      (when (pos? aid)
+        (commute healer update-in [:mana] - (max 5 (/ aid 5)))
+        (commute target update-in [:health] + aid)))))
+
+(def alive? (comp pos? :health))
+(defn play
+  [character action other]
+  (while (and (alive? @character)
+              (alive? @other)
+              (action character other))
+    (Thread/sleep (rand-int 50))))
+
+(wait-futures 1
+              (play bilbo attack smaug)
+              (play smaug attack bilbo))
+(map (comp :health deref) [smaug bilbo])
+;(487.3434192243626 0)
+
+(dosync
+  (alter smaug assoc :health 500)
+  (alter bilbo assoc :health 100))
+#_(wait-futures 1
+                 (play bilbo attack smaug)
+                 (play smaug attack bilbo)
+                 (play gandalf heal bilbo))
+(map (comp #(select-keys % [:name :health :mana]) deref) [smaug bilbo gandalf])
+;({:health 0, :name "Smaug"} {:health 281.1463912431616, :name "Bilbo"} {:mana -2.807984377856087, :health 75, :name "Gandalf"})
+
+(dosync (ref-set bilbo {:name "Bilbo"}))
+;= {:name "Bilbo"}
+
+(dosync (alter bilbo (constantly {:name "Bilbo"})))
+; {:name "Bilbo"}
+
+(defn- enforce-max-health
+  [{:keys [name health]}]
+  (fn [character-data]
+    (or (<= (:health character-data) health)
+        (throw (IllegalStateException. (str name " is already at max health!"))))))
+(defn character
+  [name & {:as opts}]
+  (let [cdata (merge {:name name :items #{} :health 500}
+                     opts)
+        cdata (assoc cdata :max-health (:health cdata))
+        validators (list* (enforce-max-health name (:health cdata))
+                          (:validators cdata))]
+    (ref (dissoc cdata :validators)
+         :validator #(every? (fn [v] (v %)) validators))))
+
+(def bilbo (character "Bilbo" :health 100 :strength 100))
+
+
+
 
 
 
