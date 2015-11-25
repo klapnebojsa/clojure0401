@@ -150,6 +150,7 @@ d1
 
 (defmacro wait-futures
   [& args]
+  ;(println "args" args)
   `(doseq [f# (futures ~@args)]
      @f#))
 
@@ -258,8 +259,10 @@ nil)
   (dosync                    ;startuje transakciju ako vec nije startovana u toj niti
     (when-let [item (first (:items @from))]   ;ukoliko se ostvari funkcija tj. ako postoji bar jedan items u liku from (od koga), prvi se smesta u promenjivu item i izvrsavaju se sledece dve linije koda
      ;(println "from to" (:name @from) (:name @to))  ;bez ovoga nece da promeni nit i onda obojica preuzimaju sve items od gubitnika
-      ;alter - sluzi za transakcijsku obradu podataka. ispunjava se samo ako se izvrse sve transakcije. ako ne vrednosti se ne menjaju
-        (alter to update-in [:items] conj item)           ;u promenjivu to se dodaje vrednost oduzeta od promenjive to                                                         ; 
+      ;alter - sluzi za transakcijsku obradu podataka. ispunjava se redom i vrsi se cekanje da se prethodna transakcija izvrsi
+        (alter to update-in [:items] conj item)           ;u promenjivu to se dodaje vrednost oduzeta od promenjive to 
+                                                            ;alter-mora se izvrsiti u okviru transakcije (dosync)
+                                                            ;menja vrednost ref tipa podataka  okviru transakcije
         (alter from update-in [:items] disj item))))      ;od promejnive to se oduzima item 
 
 (wait-futures 1                               ;wait-futures je ranije definisan MACRO - kada se dodje do makroa videti sa on radi
@@ -299,10 +302,31 @@ nil)
 
 #_(time (wait-futures 5
                       (dotimes [_ 1000]
-                        (dosync (commute x + (apply + (range 1000)))))
+                        (dosync (commute x + (apply + (range 1000)))))          ;commute - setuje vrednost ref tipa promenjive u transakciji
+                                                                                     ; optimizovani alter. nije bitno kojim se redom obavljaju vrednosti brojaca
+                                                                                     ;transakcija ce se vratiti da izvrsi sve operacije koje nisu izvrsene
+                                                                                     ;ne ceka se izvrsenje svih transakcija do kraja nego idu u uparaleli
                       (dotimes [_ 1000]
                         (dosync (commute x - (apply + (range 1000)))))))
 ;"Elapsed time: 110.156591 msecs"
+
+(def counter (ref 0))                                                 ;ALTER vs COMMUTE
+(defn commute-inc! [counter]
+         (dosync (Thread/sleep 100) (commute counter inc)))
+(defn alter-inc! [counter]
+         (dosync (Thread/sleep 100) (alter counter inc)))
+(defn bombard-counter! [n f counter]
+         (apply pcalls (repeat n #(f counter))))
+(dosync (ref-set counter 0))
+;(time (doall (bombard-counter! 20 alter-inc! counter)))
+;"Elapsed time: 2072.324499 msecs"
+;(3 1 2 4 7 10 5 8 6 9 13 14 15 12 11 16 17 20 18 19)
+; note that it took about 2000 ms = (20 workers * 100 ms / update)
+(dosync (ref-set counter 0))
+;(time (doall (bombard-counter! 20 commute-inc! counter)))
+;"Elapsed time: 203.543491 msecs"
+;(1 2 3 4 5 9 10 6 7 8 11 15 13 12 14 16 19 17 18 20)
+; notice that we got actual concurrency this time.
 
 ;NEISPRAVNO 
 (defn flawed-loot
@@ -389,11 +413,20 @@ nil)
 (dosync (alter bilbo (constantly {:name "Bilbo"})))
 ; {:name "Bilbo"}
 
+#_(defn- enforce-max-health
+   [{:keys [name health]}]
+   (println name health)
+   (fn [character-data]
+     (or (<= (:health character-data) health)
+         (throw (IllegalStateException. (str name " is already at max health!"))))))
+
 (defn- enforce-max-health
-  [{:keys [name health]}]
+  [name health]
+  (println name health)
   (fn [character-data]
     (or (<= (:health character-data) health)
         (throw (IllegalStateException. (str name " is already at max health!"))))))
+
 (defn character
   [name & {:as opts}]
   (let [cdata (merge {:name name :items #{} :health 500}
@@ -404,7 +437,53 @@ nil)
     (ref (dissoc cdata :validators)
          :validator #(every? (fn [v] (v %)) validators))))
 
-(def bilbo (character "Bilbo" :health 100 :strength 100))
+;(def bilbo (character "Bilbo" :health 100 :strength 100))
+;(heal gandalf bilbo)
+;Bilbo 100
+;CompilerException java.lang.IllegalStateException: Bilbo is already at max health!, compiling:(clojure0401\core.clj:416:58) 
+
+(dosync (alter bilbo assoc-in [:health] 95))
+;{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 95}
+;(heal gandalf bilbo)
+;Bilbo 100
+;CompilerException java.lang.IllegalStateException: Bilbo is already at max health!, compiling:(clojure0401\core.clj:421:45) 
+
+(defn heal
+      [healer target]
+      (dosync
+        (let [aid (min (* (rand 0.1) (:mana @healer))
+                       (- (:max-health @target) (:health @target)))]
+          (when (pos? aid)
+            (commute healer update-in [:mana] - (max 5 (/ aid 5)))
+            (alter target update-in [:health] + aid)))))
+(dosync (alter bilbo assoc-in [:health] 95))
+;(heal gandalf bilbo)
+;Bilbo 100
+;{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 100}
+;(heal gandalf bilbo)
+;Bilbo 100
+;nil
+
+(defn unsafe
+  []
+  (io! (println "writing to database...")))
+
+;(dosync (unsafe))
+;CompilerException java.lang.IllegalStateException: I/O in transaction, compiling:(clojure0401\core.clj:445:44) 
+
+(def x (ref (java.util.ArrayList.)))
+(wait-futures 2                        ;ranije definisan makro
+             (dosync    ;startuje transakciju ako vec nije stsrovana u toj niti
+               (dotimes [v 5]             ;u promenjivu v stavlja vredosti 0 1 2 3 4 i vrti po svakoj od vrednosti
+                 (Thread/sleep (rand-int 50))   ;(rand-int 50) - bira slucajan broj od 0 to 49. Thread/sleep - nastavlja za slucajan broj odabranih sekundi
+                 (alter x            ;alter - mora biti starovana u transakciji. Setuje vrednost ref (tip promenjive) u okviru transakcije
+                        #(doto % (.add v))))))   ;#=macro. doto u promrnjivu % dodaj vrednost trenutnog v
+                                                   ;bez poziva makro-a wait-futures 2 resenje je x = [0 1 2 3 4]
+@x
+;[0 0 1 0 2 3 4 0 1 2 3 4]
+
+
+
 
 
 
