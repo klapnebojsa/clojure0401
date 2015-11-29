@@ -1,5 +1,6 @@
 (ns clojure0401.core
-  (:use clojure.pprint))
+  (:use clojure.pprint)   ;da bi se koristila lepa stampa pprint
+  (:use [clojure.repl]))  ;da bi se koristio (doc)
 
 #_(def d (delay (println "Running...")
                 :done!))
@@ -27,7 +28,7 @@ d
 ;@long-calculation
 ;49995000
 
-;@(future (Thread/sleep 5000) :done!)      ;odlaze izvrsenje za et sekundi
+;@(future (Thread/sleep 5000) :done!)      ;odlaze izvrsenje za pet sekundi
 
 #_(deref (future (Thread/sleep 5000) :done!)   ;obezbedjuje tajmaut.
         1000                                       ;kada vrednost u gornjoj liniji dostigne 1000 izvrsava se linija ispod 
@@ -472,26 +473,89 @@ nil)
 ;CompilerException java.lang.IllegalStateException: I/O in transaction, compiling:(clojure0401\core.clj:445:44) 
 
 (def x (ref (java.util.ArrayList.)))
-(wait-futures 2                        ;ranije definisan makro
-             (dosync    ;startuje transakciju ako vec nije stsrovana u toj niti
-               (dotimes [v 5]             ;u promenjivu v stavlja vredosti 0 1 2 3 4 i vrti po svakoj od vrednosti
-                 (Thread/sleep (rand-int 50))   ;(rand-int 50) - bira slucajan broj od 0 to 49. Thread/sleep - nastavlja za slucajan broj odabranih sekundi
-                 (alter x            ;alter - mora biti starovana u transakciji. Setuje vrednost ref (tip promenjive) u okviru transakcije
-                        #(doto % (.add v))))))   ;#=macro. doto u promrnjivu % dodaj vrednost trenutnog v
+#_(wait-futures 2                        ;ranije definisan makro
+               (dosync    ;startuje transakciju ako vec nije stsrovana u toj niti
+                 (dotimes [v 5]             ;u promenjivu v stavlja vredosti 0 1 2 3 4 i vrti po svakoj od vrednosti
+                   (Thread/sleep (rand-int 50))   ;(rand-int 50) - bira slucajan broj od 0 to 49. Thread/sleep - nastavlja za slucajan broj odabranih sekundi
+                   (alter x            ;alter - mora biti starovana u transakciji. Setuje vrednost ref (tip promenjive) u okviru transakcije
+                          #(doto % (.add v))))))   ;#=macro. doto u promrnjivu % dodaj vrednost trenutnog v
                                                    ;bez poziva makro-a wait-futures 2 resenje je x = [0 1 2 3 4]
-@x
+;@x
 ;[0 0 1 0 2 3 4 0 1 2 3 4]
 
+;(def x (ref 0))
+#_(dosync
+    @(future (dosync (ref-set x 0)))   ;future-odlaze izvrsenje komade dok se ne ispune uslovi
+    (ref-set x 1))
+;@x
+;CompilerException java.lang.RuntimeException: Transaction failed after reaching retry limit, compiling:(clojure0401\core.clj:485:16)
 
+(ref-max-history (ref "abc" :min-history 3 :max-history 30))
+;30
 
+(def a (ref 0))
+;(future (dotimes [_ 500] (dosync (Thread/sleep 200) (alter a inc))))
+;@(future (dosync (Thread/sleep 1000) @a))
+;28
+(ref-history-count a)
+;5
 
+(def a (ref 0))
+;(future (dotimes [_ 500] (dosync (Thread/sleep 20) (alter a inc))))
+;@(future (dosync (Thread/sleep 100) @a))
+;= 500
+(ref-history-count a)
+;= 10
 
+(def a (ref 0 :max-history 100))
+;(future (dotimes [_ 500] (dosync (Thread/sleep 20) (alter a inc))))
+;@(future (dosync (Thread/sleep 1000) @a))
+;= 500
+(ref-history-count a)
+;= 10
 
+(def a (ref 0 :min-history 50 :max-history 100))
+;(future (dotimes [_ 500] (dosync (Thread/sleep 20) (alter a inc))))
+;@(future (dosync (Thread/sleep 1000) @a))
+;= 0
+(ref-history-count a)
+;49
 
+(def daylight (ref 1))
+(defn attack
+  [aggressor target]
+  (dosync
+    (let [damage (* (rand 0.1) (:strength @aggressor) @daylight)]
+      (commute target update-in [:health] #(max 0 (- % damage))))))
 
+(def daylight (ref 1))
+(defn attack
+  [aggressor target]
+  (dosync
+    (ensure daylight)  ;ensure se koristi da ne dodje do write skew-a. Ako je u toku transakcija nad ulaznom vrednoscu ceka se zavrsetak transakcije pa se onda vrsi obrada
+    (let [damage (* (rand 0.1) (:strength @aggressor) @daylight)]  
+      (commute target update-in [:health] #(max 0 (- % damage))))))
 
+                                          ; VARS
+(def ^:private everything 42)
 
-
+(def a
+  "A sample value."
+  5)
+;= #'user/a
+(defn b
+  "A simple calculation using `a`."
+  [c]
+  (+ a c))
+(doc a)
+; -------------------------
+; user/a
+; A sample value.
+;(doc b)
+; -------------------------
+; user/b
+; ([c])
+; A simple calculation using `a`.
 
 
 
