@@ -547,15 +547,148 @@ nil)
   "A simple calculation using `a`."
   [c]
   (+ a c))
-(doc a)
+;(doc a)
 ; -------------------------
-; user/a
+; clojure0401.core/a
 ; A sample value.
 ;(doc b)
 ; -------------------------
-; user/b
+; clojure0401.core/b
 ; ([c])
 ; A simple calculation using `a`.
+
+(meta #'a)
+;{:ns #<Namespace clojure0401.core>, :name a, :file "clojure0401\\core.clj", :column 1, :line 542, :doc "A sample value."}
+
+(def ^{:doc "A sample value."} a 5)
+;= #'user/a
+;(doc a)
+;-------------------------
+;clojure0401.core/a
+;  A sample value.
+;(alter-meta! #'a assoc :doc "A dummy value.")
+;-------------------------
+;clojure0401.core/a
+;  A sample value.
+;-------------------------
+;clojure0401.core/b
+;([c])
+;  A simple calculation using `a`.
+;{:ns #<Namespace clojure0401.core>, :name a, :file "clojure0401\\core.clj", :column 1, :line 563, :doc "A dummy value."}
+;(doc a)
+;-------------------------
+;clojure0401.core/a
+;  A dummy value.
+
+(def ^:const everything 42)
+
+(def max-value 255)
+(defn valid-value?
+  [v]
+  (<= v max-value))
+
+(valid-value? 218)
+;true
+(valid-value? 299)
+;false
+(def max-value 500)
+(valid-value? 299)
+;= true
+
+(def ^:const max-value 255)
+;= #'user/max-value
+(defn valid-value?
+[v]
+(<= v max-value))
+;= #'user/valid-value?
+(def max-value 500)
+;= #'user/max-value
+(valid-value? 299)
+;= false
+
+#_(let [a 1
+        b 2]
+    (println (+ a b))
+    (let [b 3
+          + -]
+      (println (+ a b))))
+#_(3
+-2)
+
+(def ^:dynamic *max-value* 255)     ;definise *max-value* kao 255
+(defn valid-value?
+  [v]
+  ;(println "vvv" v *max-value*)
+  (<= v *max-value*))
+#_(binding [*max-value* 500]
+      (valid-value? 299))
+;true
+
+#_(binding [*max-value* 500]         ;redefinise *max-value* kao 500
+   (println (valid-value? 299))     ;proverava da li je 299 manje od 500 i stampa rezultat
+   (doto (Thread. #(println "in other thread:" (valid-value? 299)))   ;startuje novu nit i samimi tim je *max-value* je postavljen na 255 
+                                                                      ;i proverava da li je 299 manje od 500
+     .start
+     .join))
+
+  (def ^:dynamic *var* :root)
+  (defn get-*var* [] *var*)
+  (binding [*var* :a]
+    (binding [*var* :b]
+      (binding [*var* :c]
+        (get-*var*))))
+  ; :c
+
+(defn http-get
+  [url-string]
+  (let [conn (-> url-string java.net.URL. .openConnection)
+        response-code (.getResponseCode conn)]
+    (if (== 404 response-code)
+      [response-code]
+      [response-code (-> conn .getInputStream slurp)])))
+
+(http-get "http://google.com/bad-url")
+;[404]
+(http-get "http://google.com/")
+;[200 "<!doctype html><html itemscope=\"\" itemtype=\"http://sc ...
+
+(def ^:dynamic *response-code* nil)
+(defn http-get
+  [url-string]
+  (let [conn (-> url-string java.net.URL. .openConnection)
+        response-code (.getResponseCode conn)]
+    (when (thread-bound? #'*response-code*)
+      (set! *response-code* response-code))
+    (when (not= 404 response-code) (-> conn .getInputStream slurp))))
+(http-get "http://google.com")
+;"<!doctype html><html itemscope=\"\" itemtype=\"http://schema.org/WebPage\" lang=\"sr\"><head><m ...
+*response-code*
+;nil
+(binding [*response-code* nil]
+  (let [content (http-get "http://google.com/bad-url")]
+    (println "Response code was:" *response-code*)
+    ; ... do something with `content` if it is not nil ...
+    ))
+;Response code was: 404
+;nil
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
