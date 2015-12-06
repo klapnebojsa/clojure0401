@@ -664,27 +664,46 @@ nil)
 ;"<!doctype html><html itemscope=\"\" itemtype=\"http://schema.org/WebPage\" lang=\"sr\"><head><m ...
 *response-code*
 ;nil
-(binding [*response-code* nil]
-  (let [content (http-get "http://google.com/bad-url")]
-    (println "Response code was:" *response-code*)
-    ; ... do something with `content` if it is not nil ...
-    ))
+#_(binding [*response-code* nil]
+      (let [content (http-get "http://google.com/bad-url")]
+        (println "Response code was:" *response-code*)
+        ; ... do something with `content` if it is not nil ...
+        ))
 ;Response code was: 404
 ;nil
 
+#_(binding [*max-value* 500]        ;u tekucoj niti postavljamo vrednost *max-value* na 500
+   (println (valid-value? 299))
+   @(future (valid-value? 299)))
+;true
+;true
 
+#_(binding [*max-value* 500]     ;?????????????????????????????????????????
+   (map valid-value? [299]))     ;map (funkcija vrednosti) ovde je funkcija valid-value? a broj koji se kontrolise je 299
+                                    ;ako se ne varam ali tako da je formirano zbog map funkcije u novoj niti pa je vrednost *max-value* po deafolt-u 255
+;(false)
 
+#_(map #(binding [*max-value* 500]   ;map (funkcija vrednosti)  prvo funkcijom #(binding [*max-value* 500] dodeljujemo vrednost promenjivoj *max-value* 500
+          (valid-value? %))              ;pa kontrolisemo da li je vrednost 299 manja ili jednaka novoj vrednosti 500
+       [299])
+;(true)
 
+(def x 80)
+(defn never-do-this []
+  (def x 123)
+  (def y 456)
+  (def x (+ x y))
+  x)
+(never-do-this)
+;579
 
+(def x 0)
+(alter-var-root #'x inc)
+;1
 
-
-
-
-
-
-
-
-
+(def j)
+j
+;#<Unbound Unbound: #'clojure0401.core/j>
 
 
 
