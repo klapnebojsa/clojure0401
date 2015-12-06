@@ -1,5 +1,5 @@
 (ns clojure0401.core
-  (:use clojure.pprint)   ;da bi se koristila lepa stampa pprint
+  ;(:use clojure.pprint)   ;da bi se koristila lepa stampa pprint
   (:use [clojure.repl]))  ;da bi se koristio (doc)
 
 #_(def d (delay (println "Running...")
@@ -312,9 +312,9 @@ nil)
 ;"Elapsed time: 110.156591 msecs"
 
 (def counter (ref 0))                                                 ;ALTER vs COMMUTE
-(defn commute-inc! [counter]
+#_(defn commute-inc! [counter]
          (dosync (Thread/sleep 100) (commute counter inc)))
-(defn alter-inc! [counter]
+#_(defn alter-inc! [counter]
          (dosync (Thread/sleep 100) (alter counter inc)))
 (defn bombard-counter! [n f counter]
          (apply pcalls (repeat n #(f counter))))
@@ -386,11 +386,11 @@ nil)
 
 (def alive? (comp pos? :health))
 (defn play
-  [character action other]
-  (while (and (alive? @character)
-              (alive? @other)
-              (action character other))
-    (Thread/sleep (rand-int 50))))
+ [character action other]
+ (while (and (alive? @character)
+             (alive? @other)
+             (action character other))
+   (Thread/sleep (rand-int 50))))
 
 (wait-futures 1
               (play bilbo attack smaug)
@@ -704,6 +704,159 @@ nil)
 (def j)
 j
 ;#<Unbound Unbound: #'clojure0401.core/j>
+
+#_(declare complex-helper-fn other-helper-fn)
+#_(defn public-api-function
+    [arg1 arg2]
+    ...
+    (other-helper-fn arg1 arg2 (complex-helper-fn arg1 arg2)))
+#_(defn- complex-helper-fn
+      [arg1 arg2]
+      ...)
+#_(defn- other-helper-fn
+     [arg1 arg2 arg3]
+     ...)
+
+(def a (agent 500))
+(send a range 1000)
+@a
+;(500 501 502 503 504 ... 999)
+
+(def a (agent 0))
+(send a inc)
+;= #<Agent@65f7bb1f: 1>
+
+(def a (agent 5000))
+(def b (agent 10000))
+;(send-off a #(Thread/sleep %))
+;#<Agent@3468e8d2: 5000>
+;(send-off b #(Thread/sleep %))
+;#<Agent@7e2dad1: 10000>
+@a                     ;1
+;5000
+@b                     
+;10000
+;(await a b)            ;2
+;nil
+@a                     ;3
+;nil
+
+(def a (agent nil))
+(send a (fn [_] (throw (Exception. "something is wrong"))))
+;= #<Agent@3cf71b00: nil>
+a
+;= #<Agent@3cf71b00 FAILED: nil>
+;(send a identity)
+;= #<Exception java.lang.Exception: something is wrong>
+
+(restart-agent a 42)
+;42
+(send a inc)                                                          ;1
+;#<Agent@1f23c0d6: 43>
+(reduce send a (for [x (range 3)]                                     ;2
+                 (fn [_] (throw (Exception. (str "error #" x))))))
+;#<Agent@60f57515: 43>
+(agent-error a)                                                       
+;#<Exception java.lang.Exception: error #0>
+(restart-agent a 42)
+;42
+(agent-error a)                                                        ;3
+;#<Exception java.lang.Exception: error #1>
+(restart-agent a 42 :clear-actions true)                               ;4
+;42
+(agent-error a)
+;nil
+
+(def a (agent nil :error-mode :continue))
+(send a (fn [_] (throw (Exception. "something is wrong"))))
+;= #<Agent@44a5b703: nil>
+(send a identity)
+;= #<Agent@44a5b703: nil>
+
+(def a (agent nil
+              :error-mode :continue
+              :error-handler (fn [the-agent exception]
+                               (.println System/out (.getMessage exception)))))
+;(send a (fn [_] (throw (Exception. "something is wrong"))))
+;#<Agent@5f4b678a: nil>
+;something is wrong
+(send a identity)
+;#<Agent@22b8f2c4: nil>
+
+(set-error-handler! a (fn [the-agent exception]
+                        (when (= "FATAL" (.getMessage exception))
+                          (set-error-mode! the-agent :fail))))
+;(send a (fn [_] (throw (Exception. "FATAL"))))
+;= #<Agent@6fe546fd: nil>
+;(send a identity)
+;= #<Exception java.lang.Exception: FATAL>
+
+(require '[clojure.java.io :as io])
+(def console (agent *out*))
+(def character-log (agent (io/writer "character-states.log" :append true)))
+
+(defn write
+  [^java.io.Writer w & content]
+  (doseq [x (interpose " " content)]
+    (.write w (str x)))
+  (doto w
+    (.write "\n")
+    .flush))
+
+(defn log-reference
+  [reference & writer-agents]
+  (add-watch reference :log
+             (fn [_ reference old new]
+               (doseq [writer-agent writer-agents]
+                 (send-off writer-agent write new)))))
+
+(def smaug (character "Smaug" :health 500 :strength 400))
+(def bilbo (character "Bilbo" :health 100 :strength 100))
+(def gandalf (character "Gandalf" :health 75 :mana 1000))
+
+(log-reference bilbo console character-log)
+;Smaug 500
+;Bilbo 100
+;Gandalf 75
+;#<Ref@32ba2e25: {:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 100}>
+(log-reference smaug console character-log)
+;Smaug 500
+;Bilbo 100
+;Gandalf 75
+;#<Ref@7d9b32ba: {:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 500}>
+(wait-futures 1
+              (play bilbo attack smaug)
+              (play smaug attack bilbo)
+              (play gandalf heal bilbo))
+
+#_(
+Smaug 500
+Bilbo 100
+Gandalf 75
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 65.75051168306905}
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 495.29437509687807}
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 59.682895793522924}
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 486.03427824430355}
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 481.55186193199506}
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 480.7570687909454}
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 21.460100126219757}
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 479.502126303163}
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 0}
+nil
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
