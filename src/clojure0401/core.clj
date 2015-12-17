@@ -1023,25 +1023,25 @@ nil
 
 (defn paused? [agent] (::paused (meta agent)))
 (defn run
-([] (doseq [a agents] (run a)))
-([a]
-(when (agents a)
-(send a (fn [{transition ::t :as state}]
-(when-not (paused? *agent*)
-(let [dispatch-fn (if (-> transition meta ::blocking)
-send-off
-send)]
-(dispatch-fn *agent* transition)))
-state)))))
+  ([] (doseq [a agents] (run a)))
+  ([a]
+    (when (agents a)
+      (send a (fn [{transition ::t :as state}]
+                (when-not (paused? *agent*)
+                  (let [dispatch-fn (if (-> transition meta ::blocking)
+                                      send-off
+                                      send)]
+                    (dispatch-fn *agent* transition)))
+                state)))))
 
 (defn pause
-([] (doseq [a agents] (pause a)))
-([a] (alter-meta! a assoc ::paused true)))
+  ([] (doseq [a agents] (pause a)))
+  ([a] (alter-meta! a assoc ::paused true)))
 (defn restart
-([] (doseq [a agents] (restart a)))
-([a]
-(alter-meta! a dissoc ::paused)
-(run a)))
+  ([] (doseq [a agents] (restart a)))
+  ([a]
+    (alter-meta! a dissoc ::paused)
+    (run a)))
 
 (defn test-crawler
   "Resets all state associated with the crawler, adds the given URL to the
@@ -1058,17 +1058,30 @@ state)))))
   (run)
   (Thread/sleep 6000)
   (pause)
-  (println [(count @crawled-urls) (count url-queue)]))
+  [(count @crawled-urls) (count url-queue)])
   
 ;(test-crawler 1 "http://www.bbc.co.uk/news/")
 ;[9 1728]
 
 ;(test-crawler 25 "http://www.bbc.co.uk/news/")
-;[79 17342]
+;[97 24018]
 
+#_(->> (sort-by val @word-freqs)
+reverse
+(take 10))
+;(["the" 3256] ["to" 1319] ["bbc" 1161] ["full" 1124] ["from" 1116] ["article" 1081] ["december" 986] ["section" 941] ["video" 833] ["of" 831])
+#_(->> (sort-by val @word-freqs)
+  (take 10))
+;(["sovereign" 1] ["vying" 1] ["mac" 1] ["gingerbread" 1] ["premises" 1] ["prompting" 1] ["tune" 1] ["bogglingly" 1] ["fydd" 1] ["credible" 1])
 
+;(alter-meta! #'process assoc ::blocking true)
+;{:ns #<Namespace clojure0401.core>, :name process, :file "clojure0401\\core.clj", :column 1, :line 1001, :clojure0401.core/blocking true, :arglists ([{:keys [url content]}])}
 
+;(test-crawler 1 "http://www.bbc.co.uk/news/")
+;[68 14130]
 
+(.start (Thread. #(println "Running...")))
+;Running...
 
 #_(defn relay [x i]
   (when (:next x)
