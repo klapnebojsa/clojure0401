@@ -824,47 +824,269 @@ a
 ;Bilbo 100
 ;Gandalf 75
 ;#<Ref@7d9b32ba: {:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 500}>
-(wait-futures 1
-              (play bilbo attack smaug)
-              (play smaug attack bilbo)
-              (play gandalf heal bilbo))
+#_(wait-futures 1
+               (play bilbo attack smaug)
+               (play smaug attack bilbo)
+               (play gandalf heal bilbo))
 
 #_(
 Smaug 500
 Bilbo 100
 Gandalf 75
-{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 65.75051168306905}
-{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 495.29437509687807}
-{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 59.682895793522924}
-{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 486.03427824430355}
-{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 481.55186193199506}
-{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 480.7570687909454}
-{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 21.460100126219757}
-{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 479.502126303163}
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 492.0715066027129}
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 97.77010476339552}
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 100.0}                   ;1
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 487.94404620456567}
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 486.13460591108714}
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 73.22875328590104}
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 72.35125295755785}
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 479.752100507298}
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 476.9490083907357}
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 64.5169878515156}
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 35.98593084126644}
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 7.172606176131783}
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 476.36442157180613}
 {:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 0}
 nil
 )
 
+(defn attack
+  [aggressor target]
+  (dosync
+    (let [damage (* (rand 0.1) (:strength @aggressor) (ensure daylight))]
+      (send-off console write
+                (:name @aggressor) "hits" (:name @target) "for" damage)
+      (commute target update-in [:health] #(max 0 (- % damage))))))
+(defn heal
+  [healer target]
+  (dosync
+    (let [aid (min (* (rand 0.1) (:mana @healer))
+                   (- (:max-health @target) (:health @target)))]
+      (when (pos? aid)
+        (send-off console write
+                  (:name @healer) "heals" (:name @target) "for" aid)
+        (commute healer update-in [:mana] - (max 5 (/ aid 5)))
+        (alter target update-in [:health] + aid)))))
+#_(dosync
+   (alter smaug assoc :health 500)
+   (alter bilbo assoc :health 100))
+
+;{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 500}
+;{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 100}
+
+#_(wait-futures 1
+                 (play bilbo attack smaug)
+                 (play smaug attack bilbo)
+                 (play gandalf heal bilbo))
+
+#_(
+Smaug 500
+Bilbo 100
+Gandalf 75
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 100}
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 500}
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 83.79621908754453}
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 498.84352364561397}
+Bilbo hits Smaug for 1.156476354386038
+Smaug hits Bilbo for 16.203780912455475
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 100.0}
+Gandalf heals Bilbo for 16.20378091245547
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 73.62519853943135}
+Smaug hits Bilbo for 26.374801460568648
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 100.0}
+Gandalf heals Bilbo for 26.374801460568648
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 494.0377267159964}
+Bilbo hits Smaug for 4.805796929617563
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 85.97230230127796}
+Smaug hits Bilbo for 14.027697698722038
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 485.77527726273837}
+Bilbo hits Smaug for 8.26244945325806
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 100.0}
+Gandalf heals Bilbo for 14.027697698722037
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 90.25258369737399}
+Smaug hits Bilbo for 9.747416302626002
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 100.0}
+Gandalf heals Bilbo for 9.747416302626007
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 480.6176381595708}
+Bilbo hits Smaug for 5.157639103167584
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 79.2768574586542}
+Smaug hits Bilbo for 20.723142541345794
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 84.16883029266126}
+Gandalf heals Bilbo for 4.891972834007056
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 478.60265153359995}
+Bilbo hits Smaug for 2.014986625970823
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 469.4108713003282}
+Bilbo hits Smaug for 9.191780233271723
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 70.44864412761707}
+Smaug hits Bilbo for 13.720186165044188
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 461.8574103034488}
+Bilbo hits Smaug for 7.553460996879433
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 100.0}
+Gandalf heals Bilbo for 29.551355872382928
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 461.4571536079265}
+Bilbo hits Smaug for 0.40025669552225973
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 90.66342871616342}
+Smaug hits Bilbo for 9.336571283836573
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 100.0}
+Gandalf heals Bilbo for 9.336571283836577
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 459.5429426482949}
+Bilbo hits Smaug for 1.9142109596316015
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 77.16454857545826}
+Smaug hits Bilbo for 22.835451424541745
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 454.30122924629745}
+Bilbo hits Smaug for 5.241713401997472
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 452.2505139308546}
+Bilbo hits Smaug for 2.050715315442882
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 66.61148043359417}
+Smaug hits Bilbo for 10.553068141864093
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 451.5781326654401}
+Bilbo hits Smaug for 0.6723812654144978
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 451.2218192315935}
+Bilbo hits Smaug for 0.3563134338465968
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 31.965401392700343}
+Smaug hits Bilbo for 34.646079040893824
+{:max-health 500, :strength 400, :name "Smaug", :items #{}, :health 449.1519052184677}
+Bilbo hits Smaug for 2.0699140131258287
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 9.84608834805245}
+Smaug hits Bilbo for 22.119313044647892
+{:max-health 100, :strength 100, :name "Bilbo", :items #{}, :health 0}
+Smaug hits Bilbo for 31.193353444823053
+nil    
+)
+
+(require '[net.cgrand.enlive-html :as enlive])
+(use '[clojure.string :only (lower-case)])
+(import '(java.net URL MalformedURLException))
+
+(defn- links-from
+  [base-url html]
+  (remove nil? (for [link (enlive/select html [:a])]
+                 (when-let [href (-> link :attrs :href)]
+                   (try
+                     (URL. base-url href)
+                     ; ignore bad URLs
+                     (catch MalformedURLException e))))))
+(defn- words-from
+  [html]
+  (let [chunks (-> html
+                 (enlive/at [:script] nil)
+                 (enlive/select [:body enlive/text-node]))]
+    (->> chunks
+      (mapcat (partial re-seq #"\w+"))
+      (remove (partial re-matches #"\d+"))
+      (map lower-case))))
+(def url-queue (java.util.concurrent.LinkedBlockingQueue.))
+(def crawled-urls (atom #{}))
+(def word-freqs (atom {}))
+
+(declare get-url)
+(def agents (set (repeatedly 25 #(agent {::t #'get-url :queue url-queue}))))
+(declare run process handle-results)            
+
+(use '[clojure.java.io :only (as-url)])
+(defn ^::blocking get-url
+  [{:keys [^java.util.concurrent.BlockingQueue queue] :as state}]
+  (let [url (as-url (.take queue))]
+    (try
+      (if (@crawled-urls url)
+        state
+        {:url url
+         :content (slurp url)
+         ::t #'process})
+      (catch Exception e
+        ;; skip any URL we failed to load
+        state)
+      (finally (run *agent*)))))
+
+(defn process
+  [{:keys [url content]}]
+  (try
+    (let [html (enlive/html-resource (java.io.StringReader. content))]
+      {::t #'handle-results
+       :url url
+       :links (links-from url html)
+       :words (reduce (fn [m word]
+                        (update-in m [word] (fnil inc 0)))
+                      {}
+                      (words-from html))})
+    (finally (run *agent*))))
+
+(defn ^::blocking handle-results
+  [{:keys [url links words]}]
+  (try
+    (swap! crawled-urls conj url)
+    (doseq [url links]
+      (.put url-queue url))
+    (swap! word-freqs (partial merge-with +) words)
+    {::t #'get-url :queue url-queue}
+    (finally (run *agent*))))
+
+(defn paused? [agent] (::paused (meta agent)))
+(defn run
+([] (doseq [a agents] (run a)))
+([a]
+(when (agents a)
+(send a (fn [{transition ::t :as state}]
+(when-not (paused? *agent*)
+(let [dispatch-fn (if (-> transition meta ::blocking)
+send-off
+send)]
+(dispatch-fn *agent* transition)))
+state)))))
+
+(defn pause
+([] (doseq [a agents] (pause a)))
+([a] (alter-meta! a assoc ::paused true)))
+(defn restart
+([] (doseq [a agents] (restart a)))
+([a]
+(alter-meta! a dissoc ::paused)
+(run a)))
+
+(defn test-crawler
+  "Resets all state associated with the crawler, adds the given URL to the
+   url-queue, and runs the crawler for 60 seconds, returning a vector
+   containing the number of URLs crawled, and the number of URLs
+   accumulated through crawling that have yet to be visited."
+  [agent-count starting-url]
+  (def agents (set (repeatedly agent-count
+                               #(agent {::t #'get-url :queue url-queue}))))
+  (.clear url-queue)
+  (swap! crawled-urls empty)
+  (swap! word-freqs empty)
+  (.add url-queue starting-url)
+  (run)
+  (Thread/sleep 6000)
+  (pause)
+  (println [(count @crawled-urls) (count url-queue)]))
+  
+;(test-crawler 1 "http://www.bbc.co.uk/news/")
+;[9 1728]
+
+;(test-crawler 25 "http://www.bbc.co.uk/news/")
+;[79 17342]
 
 
 
 
 
+#_(defn relay [x i]
+  (when (:next x)
+    (send (:next x) relay i))
+  (when (and (zero? i) (:report-queue x))
+    (.put (:report-queue x) i))
+  x)
+ 
+#_(defn run [m n]
+  (let [q (new java.util.concurrent.SynchronousQueue)
+        hd (reduce (fn [next _] (agent {:next next}))
+                   (agent {:report-queue q}) (range (dec m)))]
+    (doseq [i (reverse (range n))]
+      (send hd relay i))
+    (.take q)))
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+;(time (run 1000 1000))
+;"Elapsed time: 710.897294 msecs"
 
 
 
